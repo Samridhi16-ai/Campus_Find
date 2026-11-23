@@ -1,4 +1,9 @@
-"""CampusFind REST API (Flask + PostgreSQL on Render, SQLite locally)."""
+"""CampusFind backend (Flask + SQLite).
+
+Run:  python app.py
+Admin endpoints need the header  X-Admin-Token: <ADMIN_TOKEN>
+(set ADMIN_TOKEN env var; default is "admin123" for demo only).
+"""
 import os
 import re
 import secrets
@@ -11,51 +16,38 @@ from db import get_conn, init_db
 from matching import find_matches
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024  # request limit: 2 MB
 
-# Set ALLOWED_ORIGIN on Render to your exact GitHub Pages origin.
-ALLOWED_ORIGINS = {
-    origin.strip().rstrip("/")
-    for origin in os.environ.get(
-        "ALLOWED_ORIGIN", "https://samridhi16-ai.github.io"
-    ).split(",")
-    if origin.strip()
-}
+# Initialize SQLite when the module is imported (also happens under Gunicorn).
+# This is important because Render commonly starts Flask with: gunicorn app:app
+init_db()
+
+
+@app.get("/health")
+def health():
+    return jsonify({"status": "ok"})
 
 
 @app.after_request
-def add_cors(response):
-    origin = request.headers.get("Origin", "").rstrip("/")
-    if origin in ALLOWED_ORIGINS:
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Vary"] = "Origin"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Admin-Token"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
-    return response
+def add_cors(resp):
+    """Let the GitHub Pages frontend call this API from the browser."""
+    resp.headers["Access-Control-Allow-Origin"] = os.environ.get("ALLOWED_ORIGIN", "*")
+    resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Admin-Token"
+    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
+    return resp
 
 
 @app.route("/api/<path:_any>", methods=["OPTIONS"])
 def preflight(_any):
     return ("", 204)
 
-
-@app.get("/health")
-def health():
-    """Simple deployment check; also verifies that the database is reachable."""
-    with get_conn() as conn:
-        conn.execute("SELECT 1").fetchone()
-    return jsonify({"ok": True, "service": "CampusFind API"})
-
-
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "admin123")
-CATEGORIES = {
-    "Electronics", "Keys", "Cards & ID", "Bags", "Books & Notes",
-    "Clothing", "Accessories", "Other",
-}
+CATEGORIES = {"Electronics", "Keys", "Cards & ID", "Bags", "Books & Notes",
+              "Clothing", "Accessories", "Other"}
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-MAX_PHOTO_CHARS = 1_500_000
+MAX_PHOTO_CHARS = 1_500_000  # ~1MB base64 data URL
 
 
+# ---------- helpers ----------
 def err(message, code=400):
     return jsonify({"error": message}), code
 
@@ -74,45 +66,43 @@ def new_claim_code(conn):
 
 
 def public_listing(row):
-    """Never expose the reporter's email in public listing responses."""
-    data = dict(row)
-    data.pop("email", None)
-    return data
+    """Listing as shown to everyone: never expose the reporter's email."""
+    d = dict(row)
+    d.pop("email", None)
+    return d
 
 
+# ---------- listings ----------
 @app.get("/api/listings")
 def list_listings():
-    query = (request.args.get("q") or "").strip().lower()
-    item_type = request.args.get("type")
-    status = request.args.get("status")
+    q = (request.args.get("q") or "").strip().lower()
+    ltype = request.args.get("type")          # lost | found
+    status = request.args.get("status")       # active | returned
     category = request.args.get("category")
     order = "ASC" if request.args.get("sort") == "oldest" else "DESC"
 
     sql, params = "SELECT * FROM listings WHERE 1=1", []
-    if item_type in ("lost", "found"):
-        sql += " AND type=?"
-        params.append(item_type)
+    if ltype in ("lost", "found"):
+        sql += " AND type=?"; params.append(ltype)
     if status in ("active", "returned"):
-        sql += " AND status=?"
-        params.append(status)
-    if category and category.lower() != "all":
-        sql += " AND category=?"
-        params.append(category)
-    if query:
+        sql += " AND status=?"; params.append(status)
+    if category and category != "all":
+        sql += " AND category=?"; params.append(category)
+    if q:
         sql += " AND (lower(name) LIKE ? OR lower(description) LIKE ? OR lower(location) LIKE ?)"
-        params.extend([f"%{query}%"] * 3)
+        params += [f"%{q}%"] * 3
     sql += f" ORDER BY created_at {order}, id {order}"
 
     with get_conn() as conn:
         rows = conn.execute(sql, params).fetchall()
-    return jsonify([public_listing(row) for row in rows])
+    return jsonify([public_listing(r) for r in rows])
 
 
 @app.post("/api/listings")
 def create_listing():
     data = request.get_json(silent=True) or {}
     required = ["type", "category", "name", "description", "location", "date", "reporter", "email"]
-    missing = [field for field in required if not str(data.get(field, "")).strip()]
+    missing = [f for f in required if not str(data.get(f, "")).strip()]
     if missing:
         return err(f"Missing fields: {', '.join(missing)}")
     if data["type"] not in ("lost", "found"):
@@ -120,37 +110,33 @@ def create_listing():
     if data["category"] not in CATEGORIES:
         return err("Unknown category")
     if not EMAIL_RE.match(data["email"].strip()):
-        return err("Enter a valid email address")
+        return err("Enter a valid college email")
     try:
         if date.fromisoformat(data["date"]) > date.today():
             return err("Date cannot be in the future")
     except ValueError:
         return err("Date must be YYYY-MM-DD")
-
-    photo = data.get("photo") or None
-    if photo and (not isinstance(photo, str) or len(photo) > MAX_PHOTO_CHARS):
-        return err("Photo too large (max approximately 1 MB)")
+    photo = data.get("photo")
+    if photo and len(photo) > MAX_PHOTO_CHARS:
+        return err("Photo too large (max ~1MB)")
 
     with get_conn() as conn:
-        cursor = conn.execute(
-            """INSERT INTO listings
-               (type, category, name, description, location, date, reporter, email, photo)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id""",
-            (data["type"], data["category"], data["name"].strip(),
-             data["description"].strip(), data["location"].strip(), data["date"],
-             data["reporter"].strip(), data["email"].strip().lower(), photo),
+        cur = conn.execute(
+            """INSERT INTO listings (type, category, name, description, location, date,
+                                     reporter, email, photo)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (data["type"], data["category"], data["name"].strip(), data["description"].strip(),
+             data["location"].strip(), data["date"], data["reporter"].strip(),
+             data["email"].strip().lower(), photo),
         )
-        listing_id = cursor.fetchone()["id"]
-        row = conn.execute("SELECT * FROM listings WHERE id=?", (listing_id,)).fetchone()
-        all_rows = [dict(item) for item in conn.execute("SELECT * FROM listings").fetchall()]
+        row = conn.execute("SELECT * FROM listings WHERE id=?", (cur.lastrowid,)).fetchone()
+        everything = [dict(r) for r in conn.execute("SELECT * FROM listings").fetchall()]
 
-    matches = find_matches(dict(row), all_rows)
+    matches = find_matches(dict(row), everything)
     return jsonify({
         "listing": public_listing(row),
-        "suggested_matches": [
-            {"score": match["score"], "listing": public_listing(match["listing"])}
-            for match in matches
-        ],
+        "suggested_matches": [{"score": m["score"], "listing": public_listing(m["listing"])}
+                              for m in matches],
     }), 201
 
 
@@ -169,12 +155,10 @@ def listing_matches(listing_id):
         row = conn.execute("SELECT * FROM listings WHERE id=?", (listing_id,)).fetchone()
         if not row:
             return err("Listing not found", 404)
-        all_rows = [dict(item) for item in conn.execute("SELECT * FROM listings").fetchall()]
-    matches = find_matches(dict(row), all_rows)
-    return jsonify([
-        {"score": match["score"], "listing": public_listing(match["listing"])}
-        for match in matches
-    ])
+        everything = [dict(r) for r in conn.execute("SELECT * FROM listings").fetchall()]
+    matches = find_matches(dict(row), everything)
+    return jsonify([{"score": m["score"], "listing": public_listing(m["listing"])}
+                    for m in matches])
 
 
 @app.delete("/api/listings/<int:listing_id>")
@@ -182,18 +166,19 @@ def delete_listing(listing_id):
     if not require_admin():
         return err("Admin only", 403)
     with get_conn() as conn:
-        cursor = conn.execute("DELETE FROM listings WHERE id=?", (listing_id,))
-    return ("", 204) if cursor.rowcount else err("Listing not found", 404)
+        cur = conn.execute("DELETE FROM listings WHERE id=?", (listing_id,))
+    return ("", 204) if cur.rowcount else err("Listing not found", 404)
 
 
+# ---------- claims ----------
 @app.post("/api/listings/<int:listing_id>/claims")
 def submit_claim(listing_id):
     data = request.get_json(silent=True) or {}
-    for field in ("claimant", "email", "proof"):
-        if not str(data.get(field, "")).strip():
-            return err(f"Missing field: {field}")
+    for f in ("claimant", "email", "proof"):
+        if not str(data.get(f, "")).strip():
+            return err(f"Missing field: {f}")
     if not EMAIL_RE.match(data["email"].strip()):
-        return err("Enter a valid email address")
+        return err("Enter a valid college email")
 
     with get_conn() as conn:
         listing = conn.execute("SELECT * FROM listings WHERE id=?", (listing_id,)).fetchone()
@@ -203,15 +188,14 @@ def submit_claim(listing_id):
             return err("This item has already been returned", 409)
         code = new_claim_code(conn)
         conn.execute(
-            "INSERT INTO claims (listing_id, claimant, email, proof, claim_code) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO claims (listing_id, claimant, email, proof, claim_code) VALUES (?,?,?,?,?)",
             (listing_id, data["claimant"].strip(), data["email"].strip().lower(),
              data["proof"].strip(), code),
         )
-    return jsonify({
-        "claim_code": code,
-        "status": "pending",
-        "message": "Claim sent. Show this code at the campus office once approved.",
-    }), 201
+    # The code is given to the claimant now, but is only valid for handover
+    # after an admin approves the claim.
+    return jsonify({"claim_code": code, "status": "pending",
+                    "message": "Claim sent. Show this code at the campus office once approved."}), 201
 
 
 @app.get("/api/admin/claims")
@@ -224,26 +208,26 @@ def admin_claims():
                FROM claims c JOIN listings l ON l.id = c.listing_id
                ORDER BY c.created_at DESC"""
         ).fetchall()
-    return jsonify([dict(row) for row in rows])
+    return jsonify([dict(r) for r in rows])
 
 
 @app.post("/api/admin/claims/<int:claim_id>/<action>")
 def admin_review_claim(claim_id, action):
+    """action = approve | reject"""
     if not require_admin():
         return err("Admin only", 403)
     if action not in ("approve", "reject"):
         return err("Action must be approve or reject")
-    status = "approved" if action == "approve" else "rejected"
+    new_status = "approved" if action == "approve" else "rejected"
     with get_conn() as conn:
-        cursor = conn.execute(
-            "UPDATE claims SET status=? WHERE id=? AND status='pending'",
-            (status, claim_id),
-        )
-    return jsonify({"status": status}) if cursor.rowcount else err("Claim not found or already reviewed", 404)
+        cur = conn.execute("UPDATE claims SET status=? WHERE id=? AND status='pending'",
+                           (new_status, claim_id))
+    return jsonify({"status": new_status}) if cur.rowcount else err("Claim not found or already reviewed", 404)
 
 
 @app.post("/api/admin/verify-code")
 def admin_verify_code():
+    """Admin types the code shown by the claimant at the desk -> item marked returned."""
     if not require_admin():
         return err("Admin only", 403)
     code = ((request.get_json(silent=True) or {}).get("claim_code") or "").strip().upper()
@@ -263,21 +247,22 @@ def admin_mark_returned(listing_id):
     if not require_admin():
         return err("Admin only", 403)
     with get_conn() as conn:
-        cursor = conn.execute("UPDATE listings SET status='returned' WHERE id=?", (listing_id,))
-    return jsonify({"status": "returned"}) if cursor.rowcount else err("Listing not found", 404)
+        cur = conn.execute("UPDATE listings SET status='returned' WHERE id=?", (listing_id,))
+    return jsonify({"status": "returned"}) if cur.rowcount else err("Listing not found", 404)
 
 
+# ---------- stats ----------
 @app.get("/api/stats")
 def stats():
     with get_conn() as conn:
-        row = conn.execute(
+        r = conn.execute(
             """SELECT COUNT(*) AS total,
-                      SUM(CASE WHEN status='active' THEN 1 ELSE 0 END) AS active,
-                      SUM(CASE WHEN type='found' THEN 1 ELSE 0 END) AS found,
-                      SUM(CASE WHEN status='returned' THEN 1 ELSE 0 END) AS returned
+                      SUM(status='active') AS active,
+                      SUM(type='found') AS found,
+                      SUM(status='returned') AS returned
                FROM listings"""
         ).fetchone()
-    return jsonify({key: (row[key] or 0) for key in ("total", "active", "found", "returned")})
+    return jsonify({k: (r[k] or 0) for k in ("total", "active", "found", "returned")})
 
 
 @app.post("/api/admin/reset")
@@ -290,9 +275,6 @@ def reset_demo():
     return jsonify({"message": "Demo data cleared"})
 
 
-# Initialize tables when Gunicorn imports this module on Render.
-init_db()
-
-
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "5000")), debug=False)
+    init_db()
+    app.run(debug=True, port=5000)
