@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CampusFind | Lost & Found</title>
+<style>
+:root{--navy:#101b36;--blue:#4667f5;--cyan:#dff7f5;--ink:#18233d;--muted:#6c7891;--bg:#f5f7fc;--white:#fff}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:var(--navy);color:white;padding:18px max(5vw,22px);display:flex;align-items:center;justify-content:space-between;gap:20px}
+.logo{font-size:22px;font-weight:850;letter-spacing:-.6px}.logo span{color:#72e0d2}
+nav a{color:#dce4ff;text-decoration:none;margin-left:22px;font-size:14px}
+.hero{background:linear-gradient(120deg,#101b36,#243d78);color:white;padding:58px max(5vw,22px) 65px}
+.hero-inner{max-width:1100px;margin:auto}.eyebrow{color:#8fe6dc;font-weight:750;font-size:12px;letter-spacing:2px;text-transform:uppercase}
+h1{font-size:clamp(34px,5vw,55px);line-height:1.08;max-width:650px;margin:14px 0}.hero p{color:#d1dcf5;max-width:560px;line-height:1.65}
+.actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:25px}.btn{border:0;border-radius:11px;padding:12px 18px;font-weight:750;cursor:pointer;text-decoration:none;display:inline-block}
+.primary{background:#72e0d2;color:#10213b}.secondary{background:#fff;color:#18233d}
+main{max-width:1100px;margin:30px auto;padding:0 22px}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:-55px;position:relative}
+.stat{background:white;border:1px solid #e9edf5;border-radius:15px;padding:18px 20px;box-shadow:0 8px 24px #14264b0c}.stat strong{font-size:25px;display:block}.stat small{color:var(--muted)}
+.section-head{display:flex;align-items:end;justify-content:space-between;gap:15px;margin:38px 0 17px}.section-head h2{margin:0;font-size:25px}.section-head p{margin:5px 0 0;color:var(--muted);font-size:14px}
+.filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}.filters input,.filters select,.form-control{border:1px solid #dfe5f0;background:white;border-radius:10px;padding:12px 13px;font:inherit;outline:none}.filters input{flex:1;min-width:190px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.card{background:white;border:1px solid #e8edf5;border-radius:15px;overflow:hidden}.thumb{height:155px;background:#edf1f8;display:grid;place-items:center;color:#8793aa;font-size:42px}.thumb img{width:100%;height:100%;object-fit:cover}.card-body{padding:15px}.tag{display:inline-block;border-radius:30px;padding:5px 9px;font-size:11px;font-weight:800;background:#e5f8f4;color:#147a6c}.tag.found{background:#eaf0ff;color:#3f5dd4}.card h3{margin:10px 0 5px;font-size:17px}.meta{font-size:12px;color:var(--muted);line-height:1.6}.desc{font-size:13px;color:#53617a;line-height:1.5;min-height:38px}.card button{margin-top:10px;width:100%;background:#f0f3ff;color:#3554cf}
+.empty{grid-column:1/-1;text-align:center;background:white;padding:35px;border-radius:15px;color:var(--muted)}
+.modal{display:none;position:fixed;inset:0;background:#0b1536a8;z-index:5;align-items:center;justify-content:center;padding:18px}.modal.open{display:flex}.modal-box{background:white;border-radius:18px;padding:24px;width:min(520px,100%);max-height:90vh;overflow:auto}.modal-box h2{margin-top:0}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}.field label{font-size:12px;font-weight:750;color:#4b5871}.field.full{grid-column:1/-1}.form-control{width:100%}textarea.form-control{min-height:85px;resize:vertical}.close{float:right;background:#f0f2f8;border:0;border-radius:8px;padding:7px 10px;cursor:pointer}
+footer{text-align:center;padding:35px 20px;color:#8791a5;font-size:12px}
+@media(max-width:760px){.grid{grid-template-columns:repeat(2,1fr)}nav a{margin-left:10px}.stats{gap:8px}.stat{padding:14px}.stat strong{font-size:20px}}
+@media(max-width:520px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:1fr}.stats{margin-top:18px}.hero{padding-top:40px}nav{display:none}.form-grid{grid-template-columns:1fr}.field.full{grid-column:auto}}
+</style>
+</head>
+<body>
+<header><div class="logo">Campus<span>Find</span></div><nav><a href="#listings">Browse items</a><a href="#how">How it works</a></nav></header>
+<section class="hero"><div class="hero-inner"><div class="eyebrow">Your campus. Your community.</div><h1>Lost something?<br>Let's bring it home.</h1><p>A simple campus space to report lost belongings, share found items, and help classmates get their things back.</p><div class="actions"><button class="btn primary" onclick="openForm('Lost')">＋ Report lost item</button><button class="btn secondary" onclick="openForm('Found')">＋ Report found item</button></div></div></section>
+<main>
+<div class="stats"><div class="stat"><strong id="totalCount">—</strong><small>Community listings</small></div><div class="stat"><strong id="lostCount">—</strong><small>Lost items</small></div><div class="stat"><strong id="foundCount">—</strong><small>Found items</small></div></div>
+<section id="listings"><div class="section-head"><div><h2>Recent listings</h2><p>Search by item, location or category.</p></div></div>
+<div class="filters"><input id="search" placeholder="Search items, e.g. blue bottle..." oninput="loadItems()"><select id="typeFilter" onchange="loadItems()"><option value="">All reports</option><option>Lost</option><option>Found</option></select><select id="categoryFilter" onchange="loadItems()"><option value="">All categories</option><option>Electronics</option><option>ID / Cards</option><option>Books & Notes</option><option>Clothing</option><option>Accessories</option><option>Other</option></select></div>
+<div class="grid" id="items"><div class="empty">Loading listings…</div></div></section>
+<section id="how"><div class="section-head"><div><h2>How CampusFind works</h2><p>Three quick steps to help an item find its owner.</p></div></div><div class="grid"><div class="stat"><strong>01 · Report</strong><p class="meta">Add a clear title, category, location and a way to contact you.</p></div><div class="stat"><strong>02 · Discover</strong><p class="meta">Browse listings or search for the item you misplaced.</p></div><div class="stat"><strong>03 · Reconnect</strong><p class="meta">Contact the person who posted and arrange a safe campus handover.</p></div></div></section>
+</main>
+<footer>CampusFind · A student-powered lost & found board · Please verify ownership before handing over items.</footer>
+<div class="modal" id="reportModal"><div class="modal-box"><button class="close" onclick="closeForm()">✕</button><h2 id="formTitle">Report an item</h2><form id="reportForm" enctype="multipart/form-data"><div class="form-grid">
+<div class="field"><label>Report type</label><select class="form-control" name="type" id="reportType"><option>Lost</option><option>Found</option></select></div>
+<div class="field"><label>Category</label><select class="form-control" name="category" required><option>Electronics</option><option>ID / Cards</option><option>Books & Notes</option><option>Clothing</option><option>Accessories</option><option>Other</option></select></div>
+<div class="field full"><label>Item name</label><input class="form-control" name="title" placeholder="e.g. Black water bottle" required maxlength="80"></div>
+<div class="field"><label>Campus location</label><input class="form-control" name="location" placeholder="e.g. Library, Block A" required maxlength="100"></div>
+<div class="field"><label>Date</label><input class="form-control" name="date" type="date" required></div>
+<div class="field full"><label>Description</label><textarea class="form-control" name="description" placeholder="Add identifying details…" maxlength="500"></textarea></div>
+<div class="field"><label>Your name</label><input class="form-control" name="contact_name" required maxlength="60"></div>
+<div class="field"><label>Contact (email / phone)</label><input class="form-control" name="contact" required maxlength="120"></div>
+<div class="field full"><label>Photo (optional)</label><input class="form-control" name="photo" type="file" accept="image/png,image/jpeg,image/webp"></div>
+</div><button class="btn primary" style="width:100%;margin-top:8px">Publish listing</button></form></div></div>
+<script>
+const modal=document.getElementById('reportModal');
+function openForm(type){document.getElementById('reportType').value=type;document.getElementById('formTitle').textContent='Report a '+type.toLowerCase()+' item';modal.classList.add('open')}
+function closeForm(){modal.classList.remove('open')}
+async function loadItems(){
+ const params=new URLSearchParams({q:document.getElementById('search').value,type:document.getElementById('typeFilter').value,category:document.getElementById('categoryFilter').value});
+ try{
+  const r=await fetch('/api/items?'+params);const data=await r.json();
+  document.getElementById('totalCount').textContent=data.stats.total;document.getElementById('lostCount').textContent=data.stats.lost;document.getElementById('foundCount').textContent=data.stats.found;
+  const root=document.getElementById('items');
+  if(!data.items.length){root.innerHTML='<div class="empty">No listings found. Try another search or add the first report.</div>';return}
+  root.innerHTML=data.items.map(x=>`<article class="card"><div class="thumb">${x.photo?`<img src="${x.photo}" alt="Photo of ${esc(x.title)}">`:'⌕'}</div><div class="card-body"><span class="tag ${x.type.toLowerCase()}">${esc(x.type)} item</span><h3>${esc(x.title)}</h3><div class="meta">${esc(x.category)} · ${esc(x.date)}<br>📍 ${esc(x.location)}</div><p class="desc">${esc(x.description||'No extra details provided.')}</p><button class="btn" onclick="contactPoster('${encodeURIComponent(x.contact)}','${encodeURIComponent(x.contact_name)}')">Contact poster</button></div></article>`).join('');
+ }catch(e){document.getElementById('items').innerHTML='<div class="empty">Could not connect to the server. Start the Python app and refresh.</div>'}
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function contactPoster(contact,name){alert('Contact '+decodeURIComponent(name)+': '+decodeURIComponent(contact)+'\\nPlease verify the item and arrange a safe handover on campus.')}
+document.getElementById('reportForm').addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(e.target);try{const r=await fetch('/api/items',{method:'POST',body:fd});const d=await r.json();if(!r.ok)throw Error(d.error||'Could not publish');e.target.reset();closeForm();loadItems();alert('Your listing has been published!')}catch(err){alert(err.message)}});
+loadItems();
+</script>
+</body></html>
