@@ -256,13 +256,20 @@ def admin_mark_returned(listing_id):
 def stats():
     with get_conn() as conn:
         r = conn.execute(
-     SELECT       COUNT(*) AS total,
-    COALESCE(SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END), 0) AS active,
-    COALESCE(SUM(CASE WHEN status = 'found' THEN 1 ELSE 0 END), 0) AS found,
-    COALESCE(SUM(CASE WHEN status = 'returned' THEN 1 ELSE 0 END), 0) AS returned
-FROM listings
+            """
+            SELECT
+                COUNT(*) AS total,
+                COALESCE(SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END), 0) AS active,
+                COALESCE(SUM(CASE WHEN status = 'found' THEN 1 ELSE 0 END), 0) AS found,
+                COALESCE(SUM(CASE WHEN status = 'returned' THEN 1 ELSE 0 END), 0) AS returned
+            FROM listings
+            """
         ).fetchone()
-    return jsonify({k: (r[k] or 0) for k in ("total", "active", "found", "returned")})
+
+    return jsonify({
+        k: (r[k] or 0)
+        for k in ("total", "active", "found", "returned")
+    })
 
   
 
