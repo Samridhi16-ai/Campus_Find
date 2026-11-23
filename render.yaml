@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: campusfind-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: DATABASE_URL
+        fromDatabase:
+          name: campusfind-db
+          property: connectionString
+      - key: ALLOWED_ORIGIN
+        value: https://samridhi16-ai.github.io
+      - key: ADMIN_TOKEN
+        generateValue: true
+
+databases:
+  - name: campusfind-db
+    plan: free
+    databaseName: campusfind
+    user: campusfind_user
