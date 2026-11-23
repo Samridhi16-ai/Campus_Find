@@ -50,22 +50,23 @@ footer{text-align:center;padding:35px 20px;color:#8791a5;font-size:12px}
 <div class="field full"><label>Photo (optional)</label><input class="form-control" name="photo" type="file" accept="image/png,image/jpeg,image/webp"></div>
 </div><button class="btn primary" style="width:100%;margin-top:8px">Publish listing</button></form></div></div>
 <script>
+const API_BASE='https://campusfind-api-s339.onrender.com';
 const modal=document.getElementById('reportModal');
 function openForm(type){document.getElementById('reportType').value=type;document.getElementById('formTitle').textContent='Report a '+type.toLowerCase()+' item';modal.classList.add('open')}
 function closeForm(){modal.classList.remove('open')}
 async function loadItems(){
  const params=new URLSearchParams({q:document.getElementById('search').value,type:document.getElementById('typeFilter').value,category:document.getElementById('categoryFilter').value});
  try{
-  const r=await fetch('/api/items?'+params);const data=await r.json();
+  const r=await fetch(API_BASE+'/api/items?'+params);const data=await r.json();
   document.getElementById('totalCount').textContent=data.stats.total;document.getElementById('lostCount').textContent=data.stats.lost;document.getElementById('foundCount').textContent=data.stats.found;
   const root=document.getElementById('items');
   if(!data.items.length){root.innerHTML='<div class="empty">No listings found. Try another search or add the first report.</div>';return}
-  root.innerHTML=data.items.map(x=>`<article class="card"><div class="thumb">${x.photo?`<img src="${x.photo}" alt="Photo of ${esc(x.title)}">`:'⌕'}</div><div class="card-body"><span class="tag ${x.type.toLowerCase()}">${esc(x.type)} item</span><h3>${esc(x.title)}</h3><div class="meta">${esc(x.category)} · ${esc(x.date)}<br>📍 ${esc(x.location)}</div><p class="desc">${esc(x.description||'No extra details provided.')}</p><button class="btn" onclick="contactPoster('${encodeURIComponent(x.contact)}','${encodeURIComponent(x.contact_name)}')">Contact poster</button></div></article>`).join('');
+  root.innerHTML=data.items.map(x=><article class="card"><div class="thumb">${x.photo?<img src="${x.photo}" alt="Photo of ${esc(x.title)}">:'⌕'}</div><div class="card-body"><span class="tag ${x.type.toLowerCase()}">${esc(x.type)} item</span><h3>${esc(x.title)}</h3><div class="meta">${esc(x.category)} · ${esc(x.date)}<br>📍 ${esc(x.location)}</div><p class="desc">${esc(x.description||'No extra details provided.')}</p><button class="btn" onclick="contactPoster('${encodeURIComponent(x.contact)}','${encodeURIComponent(x.contact_name)}')">Contact poster</button></div></article>).join('');
  }catch(e){document.getElementById('items').innerHTML='<div class="empty">Could not connect to the server. Start the Python app and refresh.</div>'}
 }
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function contactPoster(contact,name){alert('Contact '+decodeURIComponent(name)+': '+decodeURIComponent(contact)+'\\nPlease verify the item and arrange a safe handover on campus.')}
-document.getElementById('reportForm').addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(e.target);try{const r=await fetch('/api/items',{method:'POST',body:fd});const d=await r.json();if(!r.ok)throw Error(d.error||'Could not publish');e.target.reset();closeForm();loadItems();alert('Your listing has been published!')}catch(err){alert(err.message)}});
+document.getElementById('reportForm').addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(e.target);try{const r=await fetch(API_BASE+'/api/items',{method:'POST',body:fd});const d=await r.json();if(!r.ok)throw Error(d.error||'Could not publish');e.target.reset();closeForm();loadItems();alert('Your listing has been published!')}catch(err){alert(err.message)}});
 loadItems();
 </script>
 </body></html>
