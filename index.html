@@ -19,7 +19,7 @@ main{max-width:1100px;margin:30px auto;padding:0 22px}.stats{display:grid;grid-t
 .stat{background:white;border:1px solid #e9edf5;border-radius:15px;padding:18px 20px;box-shadow:0 8px 24px #14264b0c}.stat strong{font-size:25px;display:block}.stat small{color:var(--muted)}
 .section-head{display:flex;align-items:end;justify-content:space-between;gap:15px;margin:38px 0 17px}.section-head h2{margin:0;font-size:25px}.section-head p{margin:5px 0 0;color:var(--muted);font-size:14px}
 .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}.filters input,.filters select,.form-control{border:1px solid #dfe5f0;background:white;border-radius:10px;padding:12px 13px;font:inherit;outline:none}.filters input{flex:1;min-width:190px}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.card{background:white;border:1px solid #e8edf5;border-radius:15px;overflow:hidden}.thumb{height:155px;background:#edf1f8;display:grid;place-items:center;color:#8793aa;font-size:42px}.thumb img{width:100%;height:100%;object-fit:cover}.card-body{padding:15px}.tag{display:inline-block;border-radius:30px;padding:5px 9px;font-size:11px;font-weight:800;background:#e5f8f4;color:#147a6c}.tag.found{background:#eaf0ff;color:#3f5dd4}.card h3{margin:10px 0 5px;font-size:17px}.meta{font-size:12px;color:var(--muted);line-height:1.6}.desc{font-size:13px;color:#53617a;line-height:1.5;min-height:38px}.card button{margin-top:10px;width:100%;background:#f0f3ff;color:#3554cf}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.card{background:white;border:1px solid #e8edf5;border-radius:15px;overflow:hidden}.thumb{height:155px;background:#edf1f8;display:grid;place-items:center;color:#8793aa;font-size:42px}.thumb img{width:100%;height:100%;object-fit:cover}.card-body{padding:15px}.tag{display:inline-block;border-radius:30px;padding:5px 9px;font-size:11px;font-weight:800;background:#e5f8f4;color:#147a6c}.tag.found{background:#eaf0ff;color:#3f5dd4}.card h3{margin:10px 0 5px;font-size:17px}.meta{font-size:12px;color:var(--muted);line-height:1.6}.desc{font-size:13px;color:#53617a;line-height:1.5;min-height:38px}.card button{margin-top:10px;width:100%;background:#f0f3ff;color:#3554cf}.card .delete-button{background:#fff0f0;color:#b42318;border:1px solid #ffd6d6;margin-top:8px}
 .empty{grid-column:1/-1;text-align:center;background:white;padding:35px;border-radius:15px;color:var(--muted)}
 .modal{display:none;position:fixed;inset:0;background:#0b1536a8;z-index:5;align-items:center;justify-content:center;padding:18px}.modal.open{display:flex}.modal-box{background:white;border-radius:18px;padding:24px;width:min(520px,100%);max-height:90vh;overflow:auto}.modal-box h2{margin-top:0}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}.field label{font-size:12px;font-weight:750;color:#4b5871}.field.full{grid-column:1/-1}.form-control{width:100%}textarea.form-control{min-height:85px;resize:vertical}.close{float:right;background:#f0f2f8;border:0;border-radius:8px;padding:7px 10px;cursor:pointer}
 footer{text-align:center;padding:35px 20px;color:#8791a5;font-size:12px}
@@ -93,11 +93,61 @@ function loadItems() {
     <div class="card-body"><span class="tag ${x.type.toLowerCase()}">${esc(x.type)} item</span>
     <h3>${esc(x.title)}</h3><div class="meta">${esc(x.category)} · ${esc(x.date)}<br>📍 ${esc(x.location)}</div>
     <p class="desc">${esc(x.description || 'No extra details provided.')}</p>
-    <button class="btn" type="button" onclick="contactPoster(${JSON.stringify(encodeURIComponent(x.contact))},${JSON.stringify(encodeURIComponent(x.contact_name))})">Contact poster</button>
+    <button class="btn contact-button" type="button" data-contact="${esc(x.contact)}" data-name="${esc(x.contact_name)}">Contact poster</button>
+    <button class="btn delete-button" type="button" data-delete-id="${esc(x.id)}">Delete listing</button>
     </div></article>`).join('');
 }
+document.getElementById('items').addEventListener('click', event => {
+  const deleteButton = event.target.closest('.delete-button');
+  if (deleteButton) {
+    event.preventDefault();
+    deleteListing(deleteButton.dataset.deleteId);
+    return;
+  }
+  const button = event.target.closest('.contact-button');
+  if (!button) return;
+  event.preventDefault();
+  contactPoster(button.dataset.contact || '', button.dataset.name || 'the poster');
+});
+
+function deleteListing(id) {
+  const items = getItems();
+  const item = items.find(x => String(x.id) === String(id));
+  if (!item) {
+    alert('This listing could not be found. Refresh the page and try again.');
+    return;
+  }
+  if (!confirm('Delete the listing for "' + item.title + '"? This cannot be undone.')) return;
+  saveItems(items.filter(x => String(x.id) !== String(id)));
+  loadItems();
+  alert('Listing deleted.');
+}
+
 function contactPoster(contact, name) {
-  alert('Contact ' + decodeURIComponent(name) + ': ' + decodeURIComponent(contact) + '\nPlease verify the item and arrange a safe handover on campus.');
+  const value = String(contact || '').trim();
+  if (!value) {
+    alert('No contact details were provided by this poster.');
+    return;
+  }
+  // Open the device's email app or phone dialer when the detail is recognizable.
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    window.location.assign('mailto:' + value + '?subject=' + encodeURIComponent('CampusFind - item enquiry'));
+    return;
+  }
+  const digits = value.replace(/[\s().-]/g, '');
+  if (/^\+?\d{7,15}$/.test(digits)) {
+    window.location.assign('tel:' + digits);
+    return;
+  }
+  // For other contact handles, show the exact detail and allow it to be copied.
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(value).then(
+      () => alert('Contact ' + name + ' using: ' + value + '\nContact detail copied. Please arrange a safe campus handover.'),
+      () => alert('Contact ' + name + ' using: ' + value + '\nPlease arrange a safe campus handover.')
+    );
+  } else {
+    alert('Contact ' + name + ' using: ' + value + '\nPlease arrange a safe campus handover.');
+  }
 }
 
 document.getElementById('reportForm').addEventListener('submit', async e => {
