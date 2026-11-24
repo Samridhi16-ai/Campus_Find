@@ -33,140 +33,112 @@ footer{text-align:center;padding:35px 20px;color:#8791a5;font-size:12px}
 <main>
 <div class="stats"><div class="stat"><strong id="totalCount">—</strong><small>Community listings</small></div><div class="stat"><strong id="lostCount">—</strong><small>Lost items</small></div><div class="stat"><strong id="foundCount">—</strong><small>Found items</small></div></div>
 <section id="listings"><div class="section-head"><div><h2>Recent listings</h2><p>Search by item, location or category.</p></div></div>
-<div class="filters"><input id="search" placeholder="Search items, e.g. blue bottle..." oninput="loadItems()"><select id="typeFilter" onchange="loadItems()"><option value="">All reports</option><option value="lost">Lost</option><option value="found">Found</option></select><select id="categoryFilter" onchange="loadItems()"><option value="">All categories</option><option>Electronics</option><option>Keys</option><option>Cards &amp; ID</option><option>Bags</option><option>Books &amp; Notes</option><option>Clothing</option><option>Accessories</option><option>Other</option></select></div>
+<div class="filters"><input id="search" placeholder="Search items, e.g. blue bottle..." oninput="loadItems()"><select id="typeFilter" onchange="loadItems()"><option value="">All reports</option><option>Lost</option><option>Found</option></select><select id="categoryFilter" onchange="loadItems()"><option value="">All categories</option><option>Electronics</option><option>ID / Cards</option><option>Books & Notes</option><option>Clothing</option><option>Accessories</option><option>Other</option></select></div>
 <div class="grid" id="items"><div class="empty">Loading listings…</div></div></section>
 <section id="how"><div class="section-head"><div><h2>How CampusFind works</h2><p>Three quick steps to help an item find its owner.</p></div></div><div class="grid"><div class="stat"><strong>01 · Report</strong><p class="meta">Add a clear title, category, location and a way to contact you.</p></div><div class="stat"><strong>02 · Discover</strong><p class="meta">Browse listings or search for the item you misplaced.</p></div><div class="stat"><strong>03 · Reconnect</strong><p class="meta">Contact the person who posted and arrange a safe campus handover.</p></div></div></section>
 </main>
 <footer>CampusFind · A student-powered lost & found board · Please verify ownership before handing over items.</footer>
 <div class="modal" id="reportModal"><div class="modal-box"><button class="close" onclick="closeForm()">✕</button><h2 id="formTitle">Report an item</h2><form id="reportForm" enctype="multipart/form-data"><div class="form-grid">
-<div class="field"><label>Report type</label><select class="form-control" name="type" id="reportType"><option value="lost">Lost</option><option value="found">Found</option></select></div>
-<div class="field"><label>Category</label><select class="form-control" name="category" required><option>Electronics</option><option>Cards &amp; ID</option><option>Books & Notes</option><option>Clothing</option><option>Accessories</option><option>Other</option></select></div>
+<div class="field"><label>Report type</label><select class="form-control" name="type" id="reportType"><option>Lost</option><option>Found</option></select></div>
+<div class="field"><label>Category</label><select class="form-control" name="category" required><option>Electronics</option><option>ID / Cards</option><option>Books & Notes</option><option>Clothing</option><option>Accessories</option><option>Other</option></select></div>
 <div class="field full"><label>Item name</label><input class="form-control" name="title" placeholder="e.g. Black water bottle" required maxlength="80"></div>
 <div class="field"><label>Campus location</label><input class="form-control" name="location" placeholder="e.g. Library, Block A" required maxlength="100"></div>
 <div class="field"><label>Date</label><input class="form-control" name="date" type="date" required></div>
-<div class="field full"><label>Description</label><textarea class="form-control" name="description" placeholder="Add identifying details…" maxlength="500" required></textarea></div>
+<div class="field full"><label>Description</label><textarea class="form-control" name="description" placeholder="Add identifying details…" maxlength="500"></textarea></div>
 <div class="field"><label>Your name</label><input class="form-control" name="contact_name" required maxlength="60"></div>
-<div class="field"><label>Contact (email / phone)</label><input class="form-control" name="contact" type="email" placeholder="you@example.com" required maxlength="120"></div>
+<div class="field"><label>Contact (email / phone)</label><input class="form-control" name="contact" required maxlength="120"></div>
 <div class="field full"><label>Photo (optional)</label><input class="form-control" name="photo" type="file" accept="image/png,image/jpeg,image/webp"></div>
-</div><button class="btn primary" style="width:100%;margin-top:8px">Publish listing</button></form></div></div>
+</div><button class="btn primary" type="submit" style="width:100%;margin-top:8px">Publish listing</button></form></div></div>
 <script>
-const API_BASE = 'https://campusfind-api-s339.onrender.com';
 const modal = document.getElementById('reportModal');
+const STORAGE_KEY = 'campusfind_items_v1';
 
+function getItems() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+  catch { return []; }
+}
+function saveItems(items) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+}
 function openForm(type) {
-  document.getElementById('reportType').value = type.toLowerCase();
+  document.getElementById('reportType').value = type;
   document.getElementById('formTitle').textContent = 'Report a ' + type.toLowerCase() + ' item';
   modal.classList.add('open');
 }
 function closeForm() { modal.classList.remove('open'); }
-
-async function loadItems() {
-  const params = new URLSearchParams();
-  const q = document.getElementById('search').value.trim();
-  const type = document.getElementById('typeFilter').value;
-  const category = document.getElementById('categoryFilter').value;
-  if (q) params.set('q', q);
-  if (type) params.set('type', type);
-  if (category) params.set('category', category);
-
-  const root = document.getElementById('items');
-  root.innerHTML = '<div class="empty">Loading listings…</div>';
-
-  try {
-    const [listResponse, statsResponse] = await Promise.all([
-      fetch(`${API_BASE}/api/listings?${params.toString()}`),
-      fetch(`${API_BASE}/api/stats`)
-    ]);
-    if (!listResponse.ok) throw new Error(`Listings API returned HTTP ${listResponse.status}`);
-    if (!statsResponse.ok) throw new Error(`Stats API returned HTTP ${statsResponse.status}`);
-
-    const items = await listResponse.json();
-    const stats = await statsResponse.json();
-
-    document.getElementById('totalCount').textContent = stats.total ?? 0;
-    document.getElementById('lostCount').textContent = Math.max(0, (stats.total ?? 0) - (stats.found ?? 0));
-    document.getElementById('foundCount').textContent = stats.found ?? 0;
-
-    if (!Array.isArray(items)) throw new Error('Unexpected listings response format');
-    if (!items.length) {
-      root.innerHTML = '<div class="empty">No listings found. Try another search or add the first report.</div>';
-      return;
-    }
-
-    root.innerHTML = items.map(x => `
-      <article class="card">
-        <div class="thumb">${x.photo ? `<img src="${x.photo}" alt="Item photo">` : '⌕'}</div>
-        <div class="card-body">
-          <span class="tag ${String(x.type).toLowerCase()}">${esc(x.type)} item</span>
-          <h3>${esc(x.name)}</h3>
-          <div class="meta">${esc(x.category)} · ${esc(x.date)}<br>📍 ${esc(x.location)}</div>
-          <p class="desc">${esc(x.description || 'No extra details provided.')}</p>
-          <p class="meta">Posted by ${esc(x.reporter)}</p>
-        </div>
-      </article>`).join('');
-  } catch (error) {
-    console.error('CampusFind load error:', error);
-    root.innerHTML = `<div class="empty">Could not load listings: ${esc(error.message)}. Please try refreshing.</div>`;
-  }
-}
+modal.addEventListener('click', e => { if (e.target === modal) closeForm(); });
 
 function esc(value) {
-  return String(value ?? '').replace(/[&<>"']/g, c => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]));
+  return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-
-function fileAsDataURL(file) {
-  return new Promise((resolve, reject) => {
-    if (!file) return resolve(null);
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Could not read the selected photo.'));
-    reader.readAsDataURL(file);
+function loadItems() {
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  const type = document.getElementById('typeFilter').value;
+  const category = document.getElementById('categoryFilter').value;
+  const all = getItems();
+  document.getElementById('totalCount').textContent = all.length;
+  document.getElementById('lostCount').textContent = all.filter(x => x.type === 'Lost').length;
+  document.getElementById('foundCount').textContent = all.filter(x => x.type === 'Found').length;
+  const filtered = all.filter(x => {
+    const matchesText = [x.title, x.location, x.category, x.description].join(' ').toLowerCase().includes(q);
+    return matchesText && (!type || x.type === type) && (!category || x.category === category);
   });
+  const root = document.getElementById('items');
+  if (!filtered.length) {
+    root.innerHTML = '<div class="empty">No listings found. Try another search or add the first report.</div>';
+    return;
+  }
+  root.innerHTML = filtered.map(x => `<article class="card">
+    <div class="thumb">${x.photo ? `<img src="${x.photo}" alt="Photo of ${esc(x.title)}">` : '⌕'}</div>
+    <div class="card-body"><span class="tag ${x.type.toLowerCase()}">${esc(x.type)} item</span>
+    <h3>${esc(x.title)}</h3><div class="meta">${esc(x.category)} · ${esc(x.date)}<br>📍 ${esc(x.location)}</div>
+    <p class="desc">${esc(x.description || 'No extra details provided.')}</p>
+    <button class="btn" type="button" onclick="contactPoster(${JSON.stringify(encodeURIComponent(x.contact))},${JSON.stringify(encodeURIComponent(x.contact_name))})">Contact poster</button>
+    </div></article>`).join('');
+}
+function contactPoster(contact, name) {
+  alert('Contact ' + decodeURIComponent(name) + ': ' + decodeURIComponent(contact) + '\nPlease verify the item and arrange a safe handover on campus.');
 }
 
-document.getElementById('reportForm').addEventListener('submit', async event => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const submitButton = form.querySelector('button[type="submit"], button:not([type])');
+document.getElementById('reportForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const form = e.target;
+  if (!form.reportValidity()) return;
+  const submitButton = form.querySelector('button[type="submit"], button:not(.close)');
   if (submitButton) { submitButton.disabled = true; submitButton.textContent = 'Publishing…'; }
-
   try {
     const fd = new FormData(form);
-    const photoFile = fd.get('photo');
-    const payload = {
-      type: String(fd.get('type')).toLowerCase(),
-      category: String(fd.get('category')),
-      name: String(fd.get('title')).trim(),
-      description: String(fd.get('description')).trim(),
-      location: String(fd.get('location')).trim(),
-      date: String(fd.get('date')),
-      reporter: String(fd.get('contact_name')).trim(),
-      email: String(fd.get('contact')).trim(),
-      photo: photoFile && photoFile.size ? await fileAsDataURL(photoFile) : null
+    const file = fd.get('photo');
+    let photo = '';
+    if (file && file.size) {
+      if (!file.type.startsWith('image/')) throw new Error('Please select an image file.');
+      if (file.size > 2 * 1024 * 1024) throw new Error('Please choose a photo smaller than 2 MB.');
+      photo = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Could not read the photo.'));
+        reader.readAsDataURL(file);
+      });
+    }
+    const item = {
+      id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+      type: fd.get('type'), category: fd.get('category'), title: fd.get('title').trim(),
+      location: fd.get('location').trim(), date: fd.get('date'),
+      description: fd.get('description').trim(), contact_name: fd.get('contact_name').trim(),
+      contact: fd.get('contact').trim(), photo, createdAt: Date.now()
     };
-
-    const response = await fetch(`${API_BASE}/api/listings`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || `Publish failed (HTTP ${response.status})`);
-
-    form.reset();
-    closeForm();
-    await loadItems();
+    const items = getItems();
+    items.unshift(item);
+    saveItems(items);
+    form.reset(); closeForm(); loadItems();
     alert('Your listing has been published!');
-  } catch (error) {
-    console.error('CampusFind publish error:', error);
-    alert(error.message);
+  } catch (err) {
+    if (err.name === 'QuotaExceededError') alert('Browser storage is full. Try publishing without a photo or use a smaller photo.');
+    else alert(err.message || 'Could not publish your listing.');
   } finally {
     if (submitButton) { submitButton.disabled = false; submitButton.textContent = 'Publish listing'; }
   }
 });
-
 loadItems();
 </script>
 </body></html>
